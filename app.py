@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 import time
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Explicitly allow the frontend origin
+CORS(app, resources={r"/api/*": {"origins": "https://email-frontend-eosin.vercel.app"}})
 
 # Temporary in-memory storage for company data
 companies_data = []
