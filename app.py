@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import pandas as pd
 import smtplib
@@ -15,11 +15,29 @@ app = Flask(__name__)
 # Configure CORS to allow the frontend origin
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://email-frontend-eosin.vercel.app"],
+        "origins": ["https://email-frontend-eosin.vercel.app", "http://localhost:3000"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
 })
+
+# Add CORS headers manually for all responses
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = 'https://email-frontend-eosin.vercel.app'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+# Handle OPTIONS preflight requests explicitly
+@app.route('/upload-excel', methods=['OPTIONS'])
+@app.route('/send-emails', methods=['OPTIONS'])
+def handle_options():
+    response = make_response()
+    response.headers['Access-Control-Allow-Origin'] = 'https://email-frontend-eosin.vercel.app'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response, 200
 
 # Temporary in-memory storage for company data
 companies_data = []
