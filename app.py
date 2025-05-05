@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -59,8 +60,8 @@ def upload_excel():
 def send_emails():
     try:
         data = request.json
-        email = data.get('email')
-        password = data.get('password')
+        email = data.get('email', os.getenv('EMAIL'))  # Use environment variable if email not provided
+        password = data.get('password', os.getenv('PASSWORD'))  # Use environment variable if password not provided
         start_index = data.get('startIndex')
         end_index = data.get('endIndex')
 
@@ -134,7 +135,7 @@ def send_emails():
                     Could you help facilitate a discussion with your client about this matter?<br><br>
                     <p style="font-size: 10.5pt;">Best regards,</p>
                     <p style="font-size: 10.5pt;">
-                    <span style="color: black;">Sarita(Sara) / 
+                    <span style="color: black;">Sarita (Sara) / 
                     <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: none;">Baysl</span><span style="color: rgb(169, 169, 169);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
                     </a>
                     </span><br>
