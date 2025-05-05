@@ -80,8 +80,8 @@ def send_emails():
             return jsonify({'error': 'Email sending is already in progress'}), 400
 
         data = request.json
-        email = data.get('email', os.getenv('EMAIL'))  # Use environment variable if email not provided
-        password = data.get('password', os.getenv('PASSWORD'))  # Use environment variable if password not provided
+        email = data.get('email', os.getenv('EMAIL'))
+        password = data.get('password', os.getenv('PASSWORD'))
         start_index = data.get('startIndex')
         end_index = data.get('endIndex')
 
@@ -123,16 +123,17 @@ def send_emails():
             "error": None
         }
 
-        return jsonify({
-            'message': f'Started email sending process for {total_emails_to_send} emails',
-            'status': 'in_progress'
-        })
+        # Process the first company immediately
+        return process_next_company()
     except Exception as e:
         print(f"Error starting email sending: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/process-next', methods=['POST'])
 def process_next():
+    return process_next_company()
+
+def process_next_company():
     global email_task
     try:
         if not email_task["in_progress"]:
@@ -273,7 +274,7 @@ def process_next():
                             'total_emails': email_task["total_emails_to_send"]
                         })
 
-                    # Send the email
+                    # Send the email using smtplib
                     retries = 2
                     for attempt in range(retries):
                         try:
