@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 import time
 
 app = Flask(__name__)
-# Explicitly allow the frontend origin
-CORS(app, resources={r"/api/*": {"origins": "https://email-frontend-eosin.vercel.app"}})
+# Temporarily allow all origins for debugging
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Temporary in-memory storage for company data
 companies_data = []
@@ -236,5 +236,4 @@ def send_emails():
         return jsonify({'error': str(e)}), 500
 
 # Export the app for Vercel
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
+app = app
