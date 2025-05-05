@@ -20,18 +20,6 @@ CORS(app, resources={r"/api/*": {
     "max_age": 86400
 }})
 
-# Handle preflight OPTIONS requests manually for better control
-@app.before_request
-def handle_options():
-    if request.method == "OPTIONS":
-        print("Handling OPTIONS request for", request.path)
-        response = make_response()
-        response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "https://email-frontend-eosin.vercel.app")
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-        response.headers["Access-Control-Max-Age"] = "86400"
-        return response, 200
-
 # Get SMTP credentials from environment variables
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
@@ -46,12 +34,19 @@ companies_data = []
 def upload_excel():
     global companies_data
     try:
+        print("Received request to upload Excel file")
         if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
+            print("No file part in request")
+            response = jsonify({'error': 'No file part'})
+            response.status_code = 400
+            return response
 
         file = request.files['file']
         if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
+            print("No file selected")
+            response = jsonify({'error': 'No selected file'})
+            response.status_code = 400
+            return response
 
         print(f"Received file: {file.filename}")
         df = pd.read_excel(file, engine='openpyxl')
@@ -59,7 +54,10 @@ def upload_excel():
 
         required_columns = ['Company', 'Patent Number', 'Email', 'First Name', 'Response']
         if not all(col in df.columns for col in required_columns):
-            return jsonify({'error': 'Missing required columns'}), 400
+            print(f"Missing required columns. Found: {df.columns.tolist()}, Required: {required_columns}")
+            response = jsonify({'error': 'Missing required columns'})
+            response.status_code = 400
+            return response
 
         grouped = df.groupby('Company').agg({
             'Patent Number': lambda x: list(x),
@@ -76,7 +74,9 @@ def upload_excel():
         })
     except Exception as e:
         print(f"Error processing Excel file: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        response = jsonify({'error': str(e)})
+        response.status_code = 500
+        return response
 
 @app.route('/api/send-emails', methods=['POST'])
 def send_emails():
@@ -86,10 +86,14 @@ def send_emails():
         end_index = data.get('endIndex')
 
         if not companies_data:
-            return jsonify({'error': 'No company data available. Upload an Excel file first.'}), 400
+            response = jsonify({'error': 'No company data available. Upload an Excel file first.'})
+            response.status_code = 400
+            return response
 
         if start_index < 0 or end_index >= len(companies_data) or start_index > end_index:
-            return jsonify({'error': 'Invalid index range'}), 400
+            response = jsonify({'error': 'Invalid index range'})
+            response.status_code = 400
+            return response
 
         email_tasks = []
         total_emails = 0
@@ -246,7 +250,9 @@ def send_emails():
         })
     except Exception as e:
         print(f"Error sending emails: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        response = jsonify({'error': str(e)})
+        response.status_code = 500
+        return response
 
 # Export the app for Vercel
 app = app
