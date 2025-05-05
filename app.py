@@ -20,6 +20,14 @@ CORS(app, resources={r"/api/*": {
     "max_age": 86400
 }})
 
+# Ensure CORS headers are applied to all responses, including errors
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = 'https://email-frontend-eosin.vercel.app'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    return response
+
 # Get SMTP credentials from environment variables
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
