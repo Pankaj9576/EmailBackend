@@ -66,6 +66,7 @@ def send_emails_background(email, password, start_index, end_index):
     Function to send emails in a background thread.
     Returns the number of emails sent successfully.
     """
+    print("Starting background email-sending thread")
     sent_emails = 0
     try:
         for idx in range(start_index, end_index + 1):
@@ -220,13 +221,14 @@ def send_emails_background(email, password, start_index, end_index):
                         pass  # Ignore errors during server quit
 
             if idx < end_index:  # Don't sleep after the last email
-                print("Waiting for 2 minutes before sending the next emails...")
-                time.sleep(120)
+                print("Waiting for 5 seconds before sending the next emails... (temporary for testing)")
+                time.sleep(5)  # Reduced for testing
 
     except Exception as e:
         print(f"Background task error: {str(e)}")
         return 0  # Return 0 emails sent in case of error
 
+    print(f"Finished sending emails. Total sent: {sent_emails}")
     return sent_emails
 
 @app.route('/api/send-emails', methods=['POST'])
