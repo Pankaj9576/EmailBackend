@@ -1,6 +1,6 @@
 import os
 import urllib.parse
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import pandas as pd
 from datetime import datetime, timedelta
@@ -8,10 +8,24 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend domain
 CORS(app, resources={r"/api/*": {
-    "origins": "https://email-frontend-eosin.vercel.app",
+    "origins": ["https://email-frontend-eosin.vercel.app", "http://localhost:3000"],
     "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type"]
+    "allow_headers": ["Content-Type", "Authorization"],
+    "expose_headers": ["Content-Type"],
+    "max_age": 86400
 }})
+
+# Handle preflight OPTIONS requests manually for better control
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        print("Handling OPTIONS request for", request.path)
+        response = make_response()
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "https://email-frontend-eosin.vercel.app")
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
 
 # Temporary in-memory storage for company data
 companies_data = []
