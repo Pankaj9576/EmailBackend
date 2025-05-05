@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 import time
+import sys
 
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend domain
@@ -31,7 +32,11 @@ def add_cors_headers(response):
 # Health check endpoint to verify CORS and backend status
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'healthy', 'message': 'Backend is running'})
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Backend is running',
+        'python_version': sys.version
+    })
 
 # Get SMTP credentials from environment variables
 SMTP_USER = os.getenv("SMTP_USER")
@@ -61,6 +66,12 @@ def upload_excel():
             response.status_code = 400
             return response
 
+        if not file.filename.endswith('.xlsx'):
+            print(f"Invalid file format: {file.filename}")
+            response = jsonify({'error': 'File must be an .xlsx file'})
+            response.status_code = 400
+            return response
+
         print(f"Received file: {file.filename}")
         # Check file size (Vercel has a 4.5MB limit for Hobby plan)
         file.seek(0, os.SEEK_END)
@@ -72,8 +83,17 @@ def upload_excel():
             response.status_code = 400
             return response
 
-        df = pd.read_excel(file, engine='openpyxl')
+        # Save the file temporarily to read it (Vercel serverless environment workaround)
+        temp_file_path = f"/tmp/{file.filename}"
+        file.save(temp_file_path)
+        print(f"Saved file temporarily to {temp_file_path}")
+
+        df = pd.read_excel(temp_file_path, engine='openpyxl')
         print(f"Excel file read successfully. Columns: {df.columns.tolist()}")
+
+        # Clean up the temporary file
+        os.remove(temp_file_path)
+        print(f"Removed temporary file: {temp_file_path}")
 
         required_columns = ['Company', 'Patent Number', 'Email', 'First Name', 'Response']
         if not all(col in df.columns for col in required_columns):
@@ -99,6 +119,11 @@ def upload_excel():
         print(f"ImportError: {str(e)}")
         response = jsonify({'error': f'Missing dependency: {str(e)}'})
         response.status_code = 500
+        return response
+    except pd.errors.EmptyDataError as e:
+        print(f"EmptyDataError: {str(e)}")
+        response = jsonify({'error': 'Excel file is empty or invalid'})
+        response.status_code = 400
         return response
     except Exception as e:
         print(f"Error processing Excel file: {str(e)}")
