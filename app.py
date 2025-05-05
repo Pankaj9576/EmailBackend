@@ -11,7 +11,15 @@ import io
 import time
 
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS to allow the frontend origin
+CORS(app, resources={
+    r"/*": {
+        "origins": ["https://email-frontend-eosin.vercel.app"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Temporary in-memory storage for company data
 companies_data = []
