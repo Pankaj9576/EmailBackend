@@ -104,6 +104,13 @@ def generate_emails():
         if not companies_data:
             return jsonify({'error': 'No company data available. Upload an Excel file first.'}), 400
 
+        # Validate start_index and end_index
+        if start_index is None or end_index is None:
+            return jsonify({'error': 'startIndex and endIndex are required'}), 400
+
+        if not isinstance(start_index, int) or not isinstance(end_index, int):
+            return jsonify({'error': 'startIndex and endIndex must be integers'}), 400
+
         if start_index < 0 or end_index >= len(companies_data) or start_index > end_index:
             return jsonify({'error': 'Invalid index range'}), 400
 
@@ -118,22 +125,26 @@ def generate_emails():
             patents = company['Patent Number']
             response = company.get('Response', '')
 
-            valid_emails = [email for email in emails if isinstance(email, str) and '@' in email]
+            # Ensure emails and first_names are lists of strings
+            valid_emails = [str(email).strip() for email in emails if isinstance(email, (str, int, float)) and str(email).strip() and '@' in str(email)]
             if not valid_emails:
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'No valid emails'})
                 continue
 
-            valid_first_names = first_names[:len(valid_emails)]
+            valid_first_names = [str(name).strip() for name in first_names if isinstance(name, (str, int, float)) and str(name).strip()]
             if not valid_first_names:
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'No valid names'})
                 continue
 
+            # Match the number of names to emails
+            valid_first_names = valid_first_names[:len(valid_emails)]
             if len(valid_first_names) > 1:
                 names_list = ', '.join(valid_first_names[:-1]) + ' & ' + valid_first_names[-1]
             else:
                 names_list = valid_first_names[0]
 
-            patents = [str(patent) for patent in patents if not pd.isna(patent)]
+            # Handle patents safely
+            patents = [str(patent) for patent in patents if isinstance(patent, (str, int, float)) and str(patent).strip()]
             patents = patents[:2]
             patents_str = ', '.join(patents) if patents else 'No patent information available'
 
