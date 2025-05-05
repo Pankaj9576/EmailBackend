@@ -7,6 +7,26 @@
     ],
     "routes": [
       {
+        "src": "/upload-excel",
+        "methods": ["POST"],
+        "dest": "api/app.py",
+        "headers": {
+          "Access-Control-Allow-Origin": "https://email-frontend-eosin.vercel.app",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
+      },
+      {
+        "src": "/send-emails",
+        "methods": ["POST"],
+        "dest": "api/app.py",
+        "headers": {
+          "Access-Control-Allow-Origin": "https://email-frontend-eosin.vercel.app",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
+      },
+      {
         "src": "/(.*)",
         "dest": "api/app.py",
         "headers": {

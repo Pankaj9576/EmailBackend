@@ -6,7 +6,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 from datetime import datetime, timedelta
-import io
 import time
 
 app = Flask(__name__)
@@ -139,8 +138,7 @@ def send_emails():
                     </span><br>
                     <span style="color: black; text-decoration: underline;">
                     <a href="https://techreport99.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Techreport99</a></span> <span style="color: rgb(169, 169, 169);"> | </span>
-                    <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Baysl</span><span style="color: rgb(169, 169, 169);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
-                    </a>
+                    <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Baysl</span><span style="color: rgb(169    </a>
                     </span>
                     </p>
                     e: <a href="mailto:patents@bayslope.com">patents@bayslope.com</a><br>         
@@ -233,5 +231,10 @@ def send_emails():
         print(f"Error sending emails: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# Export the app for Vercel
+from wsgiref.simple_server import make_server
+
 if __name__ == '__main__':
-    app.run(debug=True, host='localhost', port=5000)
+    with make_server('', 8000, app) as httpd:
+        print("Serving on port 8000...")
+        httpd.serve_forever()
