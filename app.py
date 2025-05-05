@@ -28,6 +28,18 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
     return response
 
+# Handle preflight OPTIONS requests manually for better control
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        print("Handling OPTIONS request for", request.path)
+        response = make_response()
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin", "https://email-frontend-eosin.vercel.app")
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
+
 # Health check endpoint to verify CORS and backend status
 @app.route('/api/health', methods=['GET'])
 def health_check():
