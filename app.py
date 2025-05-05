@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -19,18 +20,39 @@ CORS(app, resources={r"/api/*": {
 # Temporary in-memory storage for company data
 companies_data = []
 
-# In-memory storage for the email-sending task
-email_task = {
-    "in_progress": False,
-    "email": None,
-    "password": None,
-    "start_index": None,
-    "end_index": None,
-    "current_index": None,
-    "sent_emails": 0,
-    "total_emails_to_send": 0,
-    "error": None
-}
+# Path to store email_task state in /tmp
+STATE_FILE = "/tmp/email_task.json"
+
+# Load email_task from file if it exists, otherwise initialize
+def load_email_task():
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading email_task: {str(e)}")
+    return {
+        "in_progress": False,
+        "email": None,
+        "password": None,
+        "start_index": None,
+        "end_index": None,
+        "current_index": None,
+        "sent_emails": 0,
+        "total_emails_to_send": 0,
+        "error": None
+    }
+
+# Save email_task to file
+def save_email_task(email_task):
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(email_task, f)
+    except Exception as e:
+        print(f"Error saving email_task: {str(e)}")
+
+# Load initial email_task state
+email_task = load_email_task()
 
 @app.route('/api/upload-excel', methods=['POST'])
 def upload_excel():
@@ -76,6 +98,7 @@ def upload_excel():
 def send_emails():
     global email_task
     try:
+        email_task = load_email_task()
         if email_task["in_progress"]:
             return jsonify({'error': 'Email sending is already in progress'}), 400
 
@@ -122,6 +145,7 @@ def send_emails():
             "total_emails_to_send": total_emails_to_send,
             "error": None
         }
+        save_email_task(email_task)
 
         # Process the first company immediately
         return process_next_company()
@@ -136,12 +160,14 @@ def process_next():
 def process_next_company():
     global email_task
     try:
+        email_task = load_email_task()
         if not email_task["in_progress"]:
             return jsonify({'error': 'No email sending task in progress'}), 400
 
         current_index = email_task["current_index"]
         if current_index > email_task["end_index"]:
             email_task["in_progress"] = False
+            save_email_task(email_task)
             return jsonify({
                 'message': f'Finished sending {email_task["sent_emails"]} emails',
                 'status': 'completed',
@@ -266,6 +292,7 @@ def process_next_company():
                     else:
                         print(f"Skipping company {company_name} due to response or date condition.")
                         email_task["current_index"] += 1
+                        save_email_task(email_task)
                         return jsonify({
                             'message': f'Skipped company {company_name} due to response or date condition',
                             'status': 'in_progress',
@@ -274,12 +301,11 @@ def process_next_company():
                             'total_emails': email_task["total_emails_to_send"]
                         })
 
-                    # Send the email using smtplib
+                    # Send the email using smtplib with SMTP_SSL on port 465
                     retries = 2
                     for attempt in range(retries):
                         try:
-                            server = smtplib.SMTP('smtp.office365.com', 587)
-                            server.starttls()
+                            server = smtplib.SMTP_SSL('smtp.office365.com', 465)
                             print(f"Attempting to login with email: {email_task['email']} (Attempt {attempt + 1}/{retries})")
                             server.login(email_task['email'], email_task['password'])
                             print("Login successful")
@@ -302,6 +328,7 @@ def process_next_company():
                             if attempt == retries - 1:
                                 email_task["error"] = str(e)
                                 email_task["in_progress"] = False
+                                save_email_task(email_task)
                                 return jsonify({'error': str(e)}), 500
                         finally:
                             try:
@@ -311,6 +338,7 @@ def process_next_company():
 
         # Move to the next company
         email_task["current_index"] += 1
+        save_email_task(email_task)
         return jsonify({
             'message': f'Successfully sent {sent_emails} emails for company {company_name}' if sent_emails > 0 else f'Skipped company {company_name}',
             'status': 'in_progress',
@@ -322,11 +350,13 @@ def process_next_company():
         print(f"Error processing email: {str(e)}")
         email_task["error"] = str(e)
         email_task["in_progress"] = False
+        save_email_task(email_task)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/email-status', methods=['GET'])
 def email_status():
     global email_task
+    email_task = load_email_task()
     if not email_task["in_progress"] and email_task["error"]:
         return jsonify({
             'status': 'failed',
