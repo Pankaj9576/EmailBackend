@@ -28,6 +28,11 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
     return response
 
+# Health check endpoint to verify CORS and backend status
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy', 'message': 'Backend is running'})
+
 # Get SMTP credentials from environment variables
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
@@ -57,6 +62,16 @@ def upload_excel():
             return response
 
         print(f"Received file: {file.filename}")
+        # Check file size (Vercel has a 4.5MB limit for Hobby plan)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)  # Reset file pointer to the beginning
+        if file_size > 4.5 * 1024 * 1024:  # 4.5MB in bytes
+            print(f"File too large: {file_size} bytes")
+            response = jsonify({'error': 'File size exceeds 4.5MB limit'})
+            response.status_code = 400
+            return response
+
         df = pd.read_excel(file, engine='openpyxl')
         print(f"Excel file read successfully. Columns: {df.columns.tolist()}")
 
@@ -80,6 +95,11 @@ def upload_excel():
             'message': 'File processed successfully',
             'total_companies': len(companies_data)
         })
+    except ImportError as e:
+        print(f"ImportError: {str(e)}")
+        response = jsonify({'error': f'Missing dependency: {str(e)}'})
+        response.status_code = 500
+        return response
     except Exception as e:
         print(f"Error processing Excel file: {str(e)}")
         response = jsonify({'error': str(e)})
