@@ -5,16 +5,12 @@ import traceback
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import pandas as pd
-from datetime import datetime, timedelta
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import formataddr
-import time
-import sys
 import openpyxl
+from datetime import datetime, timedelta
+import sys
 
 app = Flask(__name__)
+
 # Configure CORS to allow requests from the frontend domain
 CORS(app, resources={r"/api/*": {
     "origins": ["https://email-frontend-eosin.vercel.app", "http://localhost:3000"],
@@ -43,7 +39,7 @@ def health_check():
         'pandas_version': pd.__version__
     })
 
-# Get SMTP credentials from environment variables
+# Get SMTP credentials from environment variables (for future use or validation)
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
@@ -108,7 +104,9 @@ def upload_excel():
         except Exception as e:
             print(f"Error reading Excel file: {str(e)}")
             print(traceback.format_exc())
-            raise
+            response = jsonify({'error': f'Failed to read Excel file: {str(e)}'})
+            response.status_code = 500
+            return response
         finally:
             # Ensure the temporary file is always removed
             if os.path.exists(temp_file_path):
@@ -176,30 +174,40 @@ def upload_excel():
         response.status_code = 500
         return response
 
-@app.route('/api/send-emails', methods=['POST'])
-def send_emails():
+@app.route('/api/generate-emails', methods=['POST'])
+def generate_emails():
     try:
+        print("Received request to generate emails")
         data = request.json
         start_index = data.get('startIndex')
         end_index = data.get('endIndex')
 
         if not companies_data:
+            print("No company data available")
             response = jsonify({'error': 'No company data available. Upload an Excel file first.'})
             response.status_code = 400
             return response
 
+        if start_index is None or end_index is None:
+            print("Missing startIndex or endIndex")
+            response = jsonify({'error': 'startIndex and endIndex are required'})
+            response.status_code = 400
+            return response
+
+        if not isinstance(start_index, int) or not isinstance(end_index, int):
+            print(f"Invalid index types: startIndex={type(start_index)}, endIndex={type(end_index)}")
+            response = jsonify({'error': 'startIndex and endIndex must be integers'})
+            response.status_code = 400
+            return response
+
         if start_index < 0 or end_index >= len(companies_data) or start_index > end_index:
+            print(f"Invalid index range: startIndex={start_index}, endIndex={end_index}, len(companies_data)={len(companies_data)}")
             response = jsonify({'error': 'Invalid index range'})
             response.status_code = 400
             return response
 
         email_tasks = []
         total_emails = 0
-
-        # Initialize SMTP server connection
-        server = smtplib.SMTP("smtp.office365.com", 587)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
 
         for idx in range(start_index, end_index + 1):
             company = companies_data[idx]
@@ -211,11 +219,13 @@ def send_emails():
 
             valid_emails = [email for email in emails if isinstance(email, str) and '@' in email]
             if not valid_emails:
+                print(f"No valid emails for company {company_name}")
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'No valid emails'})
                 continue
 
-            valid_first_names = first_names[:len(valid_emails)]
+            valid_first_names = [name for name in first_names if isinstance(name, str) and name.strip()]
             if not valid_first_names:
+                print(f"No valid names for company {company_name}")
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'No valid names'})
                 continue
 
@@ -224,11 +234,12 @@ def send_emails():
             else:
                 names_list = valid_first_names[0]
 
-            patents = [str(patent) for patent in patents if not pd.isna(patent)]
+            patents = [str(patent) for patent in patents if isinstance(patent, (str, int, float)) and str(patent).strip()]
             patents = patents[:2]
             patents_str = ', '.join(patents) if patents else 'No patent information available'
 
             if isinstance(response, str) and response.lower() == 'yes':
+                print(f"Skipping company {company_name}: Response is yes")
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'Response is yes'})
                 continue
 
@@ -237,118 +248,71 @@ def send_emails():
 
             if pd.isna(response) or response == '':
                 subject = f"Patent Monetization Interest for {patents_str} etc."
-                html = f"""
-                <html>
-                <head>
-                <meta charset="UTF-8">
-                <title>Patent Monetization Interest for {patents_str}</title>
-                </head>
-                <body>
-                <p style="font-size: 10.5pt;">
-                Hi {names_list},<br><br>
-                Hope all is well at your end.<br><br>
-                Our internal framework has identified patents {patents_str} etc. and we think there is a monetization opportunity for them.<br><br>
-                We work closely with a network of active buyers who regularly acquire high-quality patents for monetization across various technology sectors.<br><br>
-                Could you help facilitate a discussion with your client about this matter?<br><br>
-                <p style="font-size: 10.5pt;">Best regards,</p>
-                <p style="font-size: 10.5pt;">
-                <span style="color: black;">Sarita (Sara) /
-                <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: none;">Baysl</span><span style="color: rgb(169, 169, 169);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
-                </a>
-                </span><br>
-                <span style="color: black; text-decoration: underline;">
-                <a href="https://techreport99.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Techreport99</a></span> <span style="color: rgb(169, 169, 169);"> | </span>
-                <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Baysl</span><span style="color: rgb(169, 169, 169);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
-                </a>
-                </span>
-                </p>
-                e: <a href="mailto:patents@bayslope.com">patents@bayslope.com</a><br>
-                p: +91-9811967160 (IN), +1 650 353 7723 (US), +44 1392 58 1535 (UK)
-                </p>
-                <p style="color: grey; font-size: 8.5pt; font-family: Arial, sans-serif;">
-                The content of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this email, or if this email message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you may not copy, store or deliver this message to anyone, without a written consent of the sender. Thank you!
-                </p>
-                </body>
-                </html>
-                """
+                body = f"""Hi {names_list},
+
+Hope all is well at your end.
+
+Our internal framework has identified patents {patents_str} etc. and we think there is a monetization opportunity for them.
+
+We work closely with a network of active buyers who regularly acquire high-quality patents for monetization across various technology sectors.
+
+Could you help facilitate a discussion with your client about this matter?
+
+Best regards,
+Sarita (Sara) / Bayslope
+Techreport99 | Bayslope
+e: patents@bayslope.com
+p: +91-9811967160 (IN), +1 650 353 7723 (US), +44 1392 58 1535 (UK)
+
+The content of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this email, or if this email message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you may not copy, store or deliver this message to anyone, without a written consent of the sender. Thank you!
+"""
             elif isinstance(response, str) and response.lower() == 'no' and current_date >= follow_up_date:
                 subject = f"Follow-up: Patent Acquisition Interest"
-                html = f"""
-                <html>
-                <head>
-                <meta charset="UTF-8">
-                <title>Follow-up: Patent Acquisition Interest</title>
-                </head>
-                <body>
-                <p style="font-size: 10.5pt;">Hi {names_list},</p>
-                <p style="font-size: 10.5pt;">Hope all is well at your end.</p>
-                <p style="font-size: 10.5pt;">We understand your busy schedule so didn’t mean to bother you via this email. Just checking if you could assist in facilitating a discussion with your client.</p>
-                <p style="font-size: 10.5pt;">It will be great to hear from you.</p>
-                <p style="font-size: 10.5pt;">Best regards,</p>
-                <p style="font-size: 10.5pt;" >
-                <span style="color: black;">Sarita (Sara) /
-                <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: none;">Baysl</span><span style="color: rgb(208, 206, 206);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
-                </a>
-                </span><br>
-                <span style="color: black; text-decoration: underline;">
-                <a href="https://techreport99.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Techreport99</a></span> <span style="color: rgb(208, 206, 206);"> | </span>
-                <a href="https://bayslope.com/" style="color: rgb(208, 0, 0); text-decoration: underline;">Baysl</span><span style="color: rgb(208, 206, 206);">o</span><span style="color: rgb(208, 0, 0); text-decoration: none;">pe</span>
-                </a>
-                </span>
-                </p>
-                <p>
-                e: <a href="mailto:patents@bayslope.com">patents@bayslope.com</a><br>
-                p: +91-9811967160 (IN), +1 650 353 7723 (US), +44 1392 58 1535 (UK)
-                </p>
-                <p style="color: grey; font-size: 8.5pt; font-family: Arial, sans-serif;">
-                The content of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this email, or if this email message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you may not copy, store or deliver this message to anyone, without a written consent of the sender. Thank you!
-                </p>
-                </body>
-                </html>
-                """
+                body = f"""Hi {names_list},
+
+Hope all is well at your end.
+
+We understand your busy schedule so didn’t mean to bother you via this email. Just checking if you could assist in facilitating a discussion with your client.
+
+It will be great to hear from you.
+
+Best regards,
+Sarita (Sara) / Bayslope
+Techreport99 | Bayslope
+e: patents@bayslope.com
+p: +91-9811967160 (IN), +1 650 353 7723 (US), +44 1392 58 1535 (UK)
+
+The content of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information and may be legally protected from disclosure. If you are not the intended recipient of this email, or if this email message has been addressed to you in error, please immediately alert the sender by reply email and then delete this message and any attachments. If you are not the intended recipient, you may not copy, store or deliver this message to anyone, without a written consent of the sender. Thank you!
+"""
             else:
+                print(f"Skipping company {company_name}: Response or date condition not met")
                 email_tasks.append({'company': company_name, 'status': 'skipped', 'reason': 'Response or date condition not met'})
                 continue
 
-            # Send the email via SMTP
-            message = MIMEMultipart("alternative")
-            from_email = SMTP_USER
-            message["Subject"] = subject
-            message["From"] = formataddr(("Bayslope Business Solutions", from_email))
-            message["To"] = ', '.join(valid_emails)
-            message.attach(MIMEText(html, "html"))
+            # Generate mailto link
+            recipients = ','.join(valid_emails)
+            subject_encoded = urllib.parse.quote(subject)
+            body_encoded = urllib.parse.quote(body)
+            mailto_link = f"mailto:{recipients}?subject={subject_encoded}&body={body_encoded}"
 
-            try:
-                print(f"Attempting to send email to {valid_emails} for company {company_name}...")
-                server.sendmail(from_email, valid_emails, message.as_string())
-                print(f"Email sent successfully to {valid_emails} for company {company_name}.")
-                email_tasks.append({
-                    'company': company_name,
-                    'status': 'sent',
-                    'recipients': valid_emails
-                })
-                total_emails += len(valid_emails)
-                # Short delay to avoid rate limiting
-                time.sleep(5)
-            except Exception as e:
-                print(f"Error sending email to {valid_emails}: {str(e)}")
-                email_tasks.append({
-                    'company': company_name,
-                    'status': 'failed',
-                    'reason': str(e)
-                })
-
-        # Close the SMTP connection
-        server.quit()
+            print(f"Generated mailto link for company {company_name}: {mailto_link}")
+            email_tasks.append({
+                'company': company_name,
+                'status': 'pending',
+                'mailto_link': mailto_link,
+                'recipients': valid_emails
+            })
+            total_emails += len(valid_emails)
 
         return jsonify({
-            'message': f'Processed {len(email_tasks)} email tasks, sent {total_emails} emails',
+            'message': f'Generated {len(email_tasks)} email tasks',
             'email_tasks': email_tasks,
             'total_emails': total_emails
         })
     except Exception as e:
-        print(f"Error sending emails: {str(e)}")
-        response = jsonify({'error': str(e)})
+        print(f"Error generating emails: {str(e)}")
+        print(traceback.format_exc())
+        response = jsonify({'error': f'Unexpected error: {str(e)}'})
         response.status_code = 500
         return response
 
