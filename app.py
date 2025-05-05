@@ -1,5 +1,7 @@
 import os
 import urllib.parse
+import uuid
+import traceback
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import pandas as pd
@@ -10,6 +12,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 import time
 import sys
+import openpyxl
 
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend domain
@@ -35,7 +38,9 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'message': 'Backend is running',
-        'python_version': sys.version
+        'python_version': sys.version,
+        'openpyxl_version': openpyxl.__version__,
+        'pandas_version': pd.__version__
     })
 
 # Get SMTP credentials from environment variables
@@ -83,17 +88,32 @@ def upload_excel():
             response.status_code = 400
             return response
 
-        # Save the file temporarily to read it (Vercel serverless environment workaround)
-        temp_file_path = f"/tmp/{file.filename}"
-        file.save(temp_file_path)
-        print(f"Saved file temporarily to {temp_file_path}")
+        # Sanitize filename and save to /tmp with a unique name
+        unique_filename = f"{uuid.uuid4()}.xlsx"
+        temp_file_path = f"/tmp/{unique_filename}"
+        try:
+            file.save(temp_file_path)
+            print(f"Saved file temporarily to {temp_file_path}")
+        except Exception as e:
+            print(f"Error saving file to {temp_file_path}: {str(e)}")
+            print(traceback.format_exc())
+            response = jsonify({'error': f'Failed to save file: {str(e)}'})
+            response.status_code = 500
+            return response
 
-        df = pd.read_excel(temp_file_path, engine='openpyxl')
-        print(f"Excel file read successfully. Columns: {df.columns.tolist()}")
-
-        # Clean up the temporary file
-        os.remove(temp_file_path)
-        print(f"Removed temporary file: {temp_file_path}")
+        # Read the Excel file
+        try:
+            df = pd.read_excel(temp_file_path, engine='openpyxl')
+            print(f"Excel file read successfully. Columns: {df.columns.tolist()}")
+        except Exception as e:
+            print(f"Error reading Excel file: {str(e)}")
+            print(traceback.format_exc())
+            raise
+        finally:
+            # Ensure the temporary file is always removed
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                print(f"Removed temporary file: {temp_file_path}")
 
         required_columns = ['Company', 'Patent Number', 'Email', 'First Name', 'Response']
         if not all(col in df.columns for col in required_columns):
@@ -102,12 +122,22 @@ def upload_excel():
             response.status_code = 400
             return response
 
-        grouped = df.groupby('Company').agg({
-            'Patent Number': lambda x: list(x),
-            'Email': lambda x: list(x),
-            'First Name': lambda x: list(x),
-            'Response': 'first'
-        }).reset_index()
+        # Handle potential NaN values in the DataFrame
+        df = df.fillna('')
+
+        try:
+            grouped = df.groupby('Company').agg({
+                'Patent Number': lambda x: list(x),
+                'Email': lambda x: list(x),
+                'First Name': lambda x: list(x),
+                'Response': 'first'
+            }).reset_index()
+        except Exception as e:
+            print(f"Error grouping data: {str(e)}")
+            print(traceback.format_exc())
+            response = jsonify({'error': f'Failed to process data: {str(e)}'})
+            response.status_code = 500
+            return response
 
         companies_data = grouped.to_dict('records')
         print(f"Processed {len(companies_data)} companies: {companies_data}")
@@ -117,17 +147,32 @@ def upload_excel():
         })
     except ImportError as e:
         print(f"ImportError: {str(e)}")
+        print(traceback.format_exc())
         response = jsonify({'error': f'Missing dependency: {str(e)}'})
         response.status_code = 500
         return response
     except pd.errors.EmptyDataError as e:
         print(f"EmptyDataError: {str(e)}")
+        print(traceback.format_exc())
         response = jsonify({'error': 'Excel file is empty or invalid'})
         response.status_code = 400
         return response
+    except openpyxl.utils.exceptions.InvalidFileException as e:
+        print(f"InvalidFileException: {str(e)}")
+        print(traceback.format_exc())
+        response = jsonify({'error': 'Invalid Excel file format'})
+        response.status_code = 400
+        return response
+    except ValueError as e:
+        print(f"ValueError: {str(e)}")
+        print(traceback.format_exc())
+        response = jsonify({'error': f'Value error in processing: {str(e)}'})
+        response.status_code = 400
+        return response
     except Exception as e:
-        print(f"Error processing Excel file: {str(e)}")
-        response = jsonify({'error': str(e)})
+        print(f"Unexpected error processing Excel file: {str(e)}")
+        print(traceback.format_exc())
+        response = jsonify({'error': f'Unexpected error: {str(e)}'})
         response.status_code = 500
         return response
 
