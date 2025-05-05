@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 from datetime import datetime, timedelta
 import time
+import threading
 
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend domain, including POST and OPTIONS methods
@@ -60,25 +61,13 @@ def upload_excel():
         print(f"Error processing Excel file: {str(e)}")  # Debug log
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/send-emails', methods=['POST'])
-def send_emails():
+def send_emails_background(email, password, start_index, end_index):
+    """
+    Function to send emails in a background thread.
+    Returns the number of emails sent successfully.
+    """
+    sent_emails = 0
     try:
-        data = request.json
-        email = data.get('email', os.getenv('EMAIL'))  # Use environment variable if email not provided
-        password = data.get('password', os.getenv('PASSWORD'))  # Use environment variable if password not provided
-        start_index = data.get('startIndex')
-        end_index = data.get('endIndex')
-
-        if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
-
-        if not companies_data:
-            return jsonify({'error': 'No company data available. Upload an Excel file first.'}), 400
-
-        if start_index < 0 or end_index >= len(companies_data) or start_index > end_index:
-            return jsonify({'error': 'Invalid index range'}), 400
-
-        sent_emails = 0
         for idx in range(start_index, end_index + 1):
             company = companies_data[idx]
             company_name = company['Company']
@@ -234,9 +223,57 @@ def send_emails():
                 print("Waiting for 2 minutes before sending the next emails...")
                 time.sleep(120)
 
-        return jsonify({'message': f'Successfully sent {sent_emails} emails'})
     except Exception as e:
-        print(f"Error sending emails: {str(e)}")
+        print(f"Background task error: {str(e)}")
+        return 0  # Return 0 emails sent in case of error
+
+    return sent_emails
+
+@app.route('/api/send-emails', methods=['POST'])
+def send_emails():
+    try:
+        data = request.json
+        email = data.get('email', os.getenv('EMAIL'))  # Use environment variable if email not provided
+        password = data.get('password', os.getenv('PASSWORD'))  # Use environment variable if password not provided
+        start_index = data.get('startIndex')
+        end_index = data.get('endIndex')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        if not companies_data:
+            return jsonify({'error': 'No company data available. Upload an Excel file first.'}), 400
+
+        if start_index < 0 or end_index >= len(companies_data) or start_index > end_index:
+            return jsonify({'error': 'Invalid index range'}), 400
+
+        # Start the email-sending process in a background thread
+        thread = threading.Thread(
+            target=send_emails_background,
+            args=(email, password, start_index, end_index)
+        )
+        thread.start()
+
+        # Immediately return a response to the client
+        total_emails_to_send = 0
+        for idx in range(start_index, end_index + 1):
+            company = companies_data[idx]
+            emails = company['Email']
+            response = company.get('Response', '')
+            # Skip if response is 'yes' or invalid emails/names
+            if isinstance(response, str) and response.lower() == 'yes':
+                continue
+            valid_emails = [email for email in emails if isinstance(email, str) and '@' in email]
+            if not valid_emails:
+                continue
+            valid_first_names = company['First Name'][:len(valid_emails)]
+            if not valid_first_names:
+                continue
+            total_emails_to_send += len(valid_emails)
+
+        return jsonify({'message': f'Started sending {total_emails_to_send} emails in the background'})
+    except Exception as e:
+        print(f"Error starting email sending: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Export the app for Vercel
