@@ -76,6 +76,26 @@ def upload_excel():
         }).reset_index()
 
         companies_data = grouped.to_dict('records')
+
+        # Process companies to attach patents from same company name if patents are missing
+        for company in companies_data:
+            # Clean patent numbers and check if empty
+            company['Patent Number'] = [
+                str(patent).strip() for patent in company['Patent Number']
+                if isinstance(patent, (str, int, float)) and str(patent).strip() and str(patent).lower() != 'nan'
+            ]
+            if not company['Patent Number']:  # If no patents
+                # Look for another company with the same name that has patents
+                for other_company in companies_data:
+                    if (
+                        other_company['Company'] == company['Company'] and
+                        other_company['Patent Number'] and
+                        other_company != company
+                    ):
+                        # Attach the first 2 patent numbers from the other company
+                        company['Patent Number'] = other_company['Patent Number'][:2]
+                        break
+
         print(f"Processed {len(companies_data)} companies")
         return jsonify({
             'message': 'File processed successfully',
@@ -120,8 +140,7 @@ def send_emails():
             names_list = ', '.join(valid_first_names[:-1]) + ' & ' + valid_first_names[-1] if len(valid_first_names) > 1 else valid_first_names[0] if valid_first_names else ''
 
             # Select only the first 2 patent numbers from the list
-            patents = [str(patent).strip() for patent in patents if isinstance(patent, (str, int, float)) and str(patent).strip()]
-            selected_patents = patents[:2]  # Take only the first 2 patents
+            selected_patents = patents[:2]  # Already ensured in upload_excel, just confirming
             patents_str = ', '.join(selected_patents) if selected_patents else 'No patent information available'
 
             if isinstance(response, str) and response.lower() == 'yes':
