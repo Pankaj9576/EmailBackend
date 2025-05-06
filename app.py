@@ -68,8 +68,9 @@ def upload_excel():
         if not all(col in df.columns for col in required_columns):
             return jsonify({'error': 'Missing required columns'}), 400
 
+        # Convert comma-separated patent numbers to lists during grouping
         grouped = df.groupby('Company').agg({
-            'Patent Number': lambda x: list(x),
+            'Patent Number': lambda x: list(x),  # Will process this further below
             'Email': lambda x: list(x),
             'First Name': lambda x: list(x),
             'Response': 'first'
@@ -77,15 +78,21 @@ def upload_excel():
 
         companies_data = grouped.to_dict('records')
 
-        # Process companies to attach patents from same company name if patents are missing
+        # Process companies to handle comma-separated patents and attach patents from same company
         for company in companies_data:
-            # Clean patent numbers and check if empty
-            company['Patent Number'] = [
-                str(patent).strip() for patent in company['Patent Number']
-                if isinstance(patent, (str, int, float)) and str(patent).strip() and str(patent).lower() != 'nan'
-            ]
-            if not company['Patent Number']:  # If no patents
-                # Look for another company with the same name that has patents
+            # Handle patent numbers: split comma-separated strings and clean
+            patent_list = []
+            for patent_entry in company['Patent Number']:
+                if pd.isna(patent_entry) or str(patent_entry).strip().lower() == 'nan':
+                    continue
+                # Split by comma and clean each patent number
+                patents = [p.strip() for p in str(patent_entry).split(',') if p.strip()]
+                patent_list.extend(patents)
+            # Take only the first 2 patents
+            company['Patent Number'] = patent_list[:2]
+
+            # If no patents, look for another company with the same name
+            if not company['Patent Number']:
                 for other_company in companies_data:
                     if (
                         other_company['Company'] == company['Company'] and
@@ -139,8 +146,8 @@ def send_emails():
             valid_first_names = valid_first_names[:len(valid_emails)]
             names_list = ', '.join(valid_first_names[:-1]) + ' & ' + valid_first_names[-1] if len(valid_first_names) > 1 else valid_first_names[0] if valid_first_names else ''
 
-            # Select only the first 2 patent numbers from the list
-            selected_patents = patents[:2]  # Already ensured in upload_excel, just confirming
+            # Ensure only the first 2 patent numbers are used
+            selected_patents = patents[:2]
             patents_str = ', '.join(selected_patents) if selected_patents else 'No patent information available'
 
             if isinstance(response, str) and response.lower() == 'yes':
