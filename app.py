@@ -93,7 +93,7 @@ def send_emails():
         password = data.get('password')
         start_index = data.get('startIndex')
         end_index = data.get('endIndex')
-        email_format = data.get('emailFormat', 'General Email')  # Default to General Email
+        email_format = data.get('emailFormat', 'General Email')
 
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
@@ -119,9 +119,10 @@ def send_emails():
             valid_first_names = valid_first_names[:len(valid_emails)]
             names_list = ', '.join(valid_first_names[:-1]) + ' & ' + valid_first_names[-1] if len(valid_first_names) > 1 else valid_first_names[0] if valid_first_names else ''
 
-            patents = [str(patent) for patent in patents if isinstance(patent, (str, int, float)) and str(patent).strip()]
-            patents = patents[:2]
-            patents_str = ', '.join(patents) if patents else 'No patent information available'
+            # Select only the first 2 patent numbers from the list
+            patents = [str(patent).strip() for patent in patents if isinstance(patent, (str, int, float)) and str(patent).strip()]
+            selected_patents = patents[:2]  # Take only the first 2 patents
+            patents_str = ', '.join(selected_patents) if selected_patents else 'No patent information available'
 
             if isinstance(response, str) and response.lower() == 'yes':
                 continue
