@@ -93,6 +93,7 @@ def send_emails():
         password = data.get('password')
         start_index = data.get('startIndex')
         end_index = data.get('endIndex')
+        email_format = data.get('emailFormat', 'General Email')  # Default to General Email
 
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
@@ -128,7 +129,31 @@ def send_emails():
             follow_up_date = datetime(2024, 11, 27) + timedelta(days=15)
             current_date = datetime.now()
 
-            if pd.isna(response) or response == '':
+            if email_format == 'Meeting Email':
+                subject = f"Request for Meeting to Discuss Patent Monetization Opportunities"
+                html = f"""
+                <html>
+                <body>
+                <p style="font-size: 10.5pt;">
+                    Hi {names_list},<br><br>
+                    Hope this email finds you well.<br><br>
+                    We have identified patents {patents_str} etc. as potential candidates for monetization and believe there is a significant opportunity for your organization.<br><br>
+                    We would love to schedule a meeting to discuss this further and explore how we can collaborate with your team. Please let us know a convenient time for a call or virtual meeting.<br><br>
+                    Feel free to suggest a date and time, or you can book a slot directly via our calendar: <a href="https://calendly.com/bayslope/meeting">Schedule a Meeting</a>.<br><br>
+                    Looking forward to your response.<br><br>
+                    Best regards,<br>
+                    Sarita (Sara) / Bayslope<br>
+                    Techreport99 | Bayslope<br>
+                    e: <a href="mailto:patents@bayslope.com">patents@bayslope.com</a><br>
+                    p: +91-9811967160 (IN), +1 650 353 7723 (US), +44 1392 58 1535 (UK)<br><br>
+                    <span style="color: grey; font-size: 8.5pt;">
+                        The content of this email message and any attachments are intended solely for the addressee(s) and may contain confidential and/or privileged information...
+                    </span>
+                </p>
+                </body>
+                </html>
+                """
+            elif (pd.isna(response) or response == '') and email_format == 'General Email':
                 subject = f"Patent Monetization Interest for {patents_str} etc."
                 html = f"""
                 <html>
@@ -151,7 +176,7 @@ def send_emails():
                 </body>
                 </html>
                 """
-            elif isinstance(response, str) and response.lower() == 'no' and current_date >= follow_up_date:
+            elif isinstance(response, str) and response.lower() == 'no' and current_date >= follow_up_date and email_format == 'General Email':
                 subject = f"Follow-up: Patent Acquisition Interest"
                 html = f"""
                 <html>
