@@ -112,6 +112,17 @@ def upload_excel():
         print(f"Error processing Excel file: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/get-companies', methods=['GET'])
+def get_companies():
+    try:
+        if not companies_data:
+            return jsonify({'error': 'No company data available. Upload an Excel file first.'}), 400
+        companies = [company['Company'] for company in companies_data]
+        return jsonify({'companies': companies})
+    except Exception as e:
+        print(f"Error fetching companies: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/send-emails', methods=['POST'])
 def send_emails():
     try:
